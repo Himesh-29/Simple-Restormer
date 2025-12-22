@@ -22,3 +22,6 @@ scikit-learn
 natsort
 h5py
 tensorboard
+mamba-ssm
+causal-conv1d>=1.2.0
+timm

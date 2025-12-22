@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from collections import deque
 from copy import deepcopy
 
-from models.restormer import Restormer
+from models import define_network
 from data.dataset import Dataset_PairedImage
 from core.scheduler import CosineAnnealingRestartCyclicLR
 from core.metrics import calculate_psnr
@@ -83,7 +83,7 @@ class Trainer:
                 ]
             )
             self.logger = logging.getLogger('Restormer')
-            self.logger.info(f"Model [Restormer] is created.")
+            self.logger.info(f"Model [{self.opt['network_g'].get('type', 'Restormer')}] is created.")
             
             self.writer = SummaryWriter(log_dir=os.path.join('tb_logger', opt['name']))
             os.makedirs(os.path.join('experiments', opt['name'], 'models'), exist_ok=True)
@@ -98,9 +98,8 @@ class Trainer:
             )
 
     def _init_model(self):
-        net_opt = self.opt['network_g'].copy()
-        net_opt.pop('type', None)
-        self.net_g = Restormer(**net_opt).to(self.device)
+        self.net_g = define_network(self.opt['network_g']).to(self.device)
+
         if self.is_dist:
             self.net_g = DDP(self.net_g, device_ids=[self.local_rank], output_device=self.local_rank)
 

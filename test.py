@@ -4,7 +4,7 @@ import torch
 import os
 import sys
 from tqdm import tqdm
-from models.restormer import Restormer
+from models import define_network
 from data.dataset import Dataset_PairedImage
 from torch.utils.data import DataLoader
 from core.metrics import calculate_psnr, calculate_ssim
@@ -24,9 +24,7 @@ def main():
     print(f"Using device: {device}")
     
     # Load model
-    net_opt = opt['network_g'].copy()
-    net_opt.pop('type', None)
-    model = Restormer(**net_opt).to(device)
+    model = define_network(opt['network_g']).to(device)
     
     checkpoint = torch.load(args.model_path, map_location=device, weights_only=True)
     if 'params' in checkpoint:
