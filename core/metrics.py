@@ -3,15 +3,16 @@ import torch.nn.functional as F
 import numpy as np
 import cv2
 
-def bgr2ycbcr(img, only_y=True):
-    """Convert BGR image to YCbCr.
+def rgb2ycbcr(img, only_y=True):
+    """Convert RGB image to YCbCr.
     The implementation is the same as MATLAB's rgb2ycbcr.
     """
     img = img.astype(np.float32)
     if only_y:
-        rlt = np.dot(img, [24.966, 128.553, 65.481]) / 255.0 + 16.0 / 255.0
+        # Standard RGB coefficients: R: 65.481, G: 128.553, B: 24.966
+        rlt = np.dot(img, [65.481, 128.553, 24.966]) / 255.0 + 16.0 / 255.0
     else:
-        rlt = np.matmul(img, [[24.966, 112, -18.214], [128.553, -74.203, -93.786], [65.481, -37.797, 112]]) / 255.0 + [16, 128, 128] / 255.0
+        rlt = np.matmul(img, [[65.481, -37.797, 112], [128.553, -74.203, -93.786], [24.966, 112, -18.214]]) / 255.0 + [16, 128, 128] / 255.0
     return rlt.astype(np.float32)
 
 def calculate_psnr(img1, img2, crop_border=0, test_y_channel=False):
@@ -37,8 +38,8 @@ def calculate_psnr(img1, img2, crop_border=0, test_y_channel=False):
         img2 = img2[crop_border:-crop_border, crop_border:-crop_border, ...]
 
     if test_y_channel:
-        img1 = bgr2ycbcr(img1, only_y=True)
-        img2 = bgr2ycbcr(img2, only_y=True)
+        img1 = rgb2ycbcr(img1, only_y=True)
+        img2 = rgb2ycbcr(img2, only_y=True)
 
     mse = np.mean((img1 - img2)**2)
     if mse == 0:
@@ -66,8 +67,8 @@ def calculate_ssim(img1, img2, crop_border=0, test_y_channel=False):
         img2 = img2[crop_border:-crop_border, crop_border:-crop_border, ...]
 
     if test_y_channel:
-        img1 = bgr2ycbcr(img1, only_y=True)
-        img2 = bgr2ycbcr(img2, only_y=True)
+        img1 = rgb2ycbcr(img1, only_y=True)
+        img2 = rgb2ycbcr(img2, only_y=True)
 
     try:
         from skimage.metrics import structural_similarity as ssim

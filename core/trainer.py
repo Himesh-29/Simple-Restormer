@@ -168,6 +168,7 @@ class Trainer:
         total_iter = self.opt['train']['total_iter']
         current_iter = 0
         epoch = 0
+        start_time = time.time()
         
         # Progressive learning setup
         train_ds_opt = self.opt['datasets']['train']
@@ -277,6 +278,15 @@ class Trainer:
 
             epoch += 1
 
+        if self.rank == 0:
+            consumed_time = str(timedelta(seconds=int(time.time() - start_time)))
+            self.logger.info(f'End of training. Time consumed: {consumed_time}')
+            self.logger.info('Save the latest model.')
+            self.save(epoch, current_iter)
+        
+        # Final validation
+        self.validate(current_iter)
+
     @torch.no_grad()
     def validate(self, current_iter):
         model = self.net_g_ema if hasattr(self, 'net_g_ema') else (self.net_g.module if self.is_dist else self.net_g)
@@ -333,7 +343,7 @@ class Trainer:
         torch.save(state_dict, state_path)
 
     def resume_training(self, state_path):
-        state = torch.load(state_path, map_location=self.device)
+        state = torch.load(state_path, map_location=self.device, weights_only=True)
         self.resume_epoch = state['epoch']
         self.resume_iter = state['iter']
         self.optimizer_g.load_state_dict(state['optimizer_g'])
@@ -342,7 +352,7 @@ class Trainer:
         # Load model weights
         model_path = os.path.join('experiments', self.opt['name'], 'models', f"net_g_{self.resume_iter}.pth")
         if os.path.exists(model_path):
-            checkpoint = torch.load(model_path, map_location=self.device)
+            checkpoint = torch.load(model_path, map_location=self.device, weights_only=True)
             net_g = self.net_g.module if self.is_dist else self.net_g
             net_g.load_state_dict(checkpoint['params'])
             if 'params_ema' in checkpoint and hasattr(self, 'net_g_ema'):
