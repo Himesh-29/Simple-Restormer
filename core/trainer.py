@@ -9,9 +9,8 @@ import yaml
 import time
 import random
 import logging
-import numpy as np
-from datetime import datetime
-from collections import OrderedDict, deque
+from datetime import datetime, timedelta
+from collections import deque
 from copy import deepcopy
 
 from models.restormer import Restormer
@@ -254,7 +253,7 @@ class Trainer:
                     remain_iter = total_iter - current_iter
                     avg_iter_time = iter_time # Simplified, for real ETA we'd use a moving average
                     eta_sec = remain_iter * avg_iter_time
-                    eta_str = str(time.timedelta(seconds=int(eta_sec)))
+                    eta_str = str(timedelta(seconds=int(eta_sec)))
                     
                     self.logger.info(
                         f"[{self.opt['name']}][epoch: {epoch:2d}, iter: {current_iter:7,d}, lr:({lr:.3e},)] "
