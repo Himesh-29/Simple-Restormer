@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "restormer-modular"
+version = "1.0.0"
+description = "A modular, standalone refactor of the Restormer image restoration project."
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [
+    { name = "Himesh" }
+]
+dependencies = [
+    "torch",
+    "torchvision",
+    "numpy",
+    "opencv-python",
+    "einops",
+    "pyyaml",
+    "tqdm",
+    "scikit-image",
+    "tensorboard"
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["models*", "core*", "data*"]
