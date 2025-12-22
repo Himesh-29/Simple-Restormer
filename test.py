@@ -43,6 +43,11 @@ def main():
     
     os.makedirs('results', exist_ok=True)
 
+    # Metric options
+    psnr_opt = opt['val']['metrics'].get('psnr', {})
+    crop_border = psnr_opt.get('crop_border', 0)
+    test_y_channel = psnr_opt.get('test_y_channel', False)
+
     print(f"Testing on {len(val_set)} images...")
     with torch.no_grad():
         for i, data in enumerate(val_loader):
@@ -50,7 +55,9 @@ def main():
             gt = data['gt'].to(device)
             output = model(lq)
             
-            psnr = calculate_psnr(output[0], gt[0])
+            # Clamp and calculate
+            output = torch.clamp(output, 0, 1)
+            psnr = calculate_psnr(output[0], gt[0], crop_border=crop_border, test_y_channel=test_y_channel)
             psnr_total += psnr
             count += 1
             

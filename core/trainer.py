@@ -8,8 +8,10 @@ from torch.utils.tensorboard import SummaryWriter
 import yaml
 import time
 import random
+import logging
 import numpy as np
-from collections import OrderedDict
+from datetime import datetime
+from collections import OrderedDict, deque
 from copy import deepcopy
 
 from models.restormer import Restormer
@@ -68,6 +70,21 @@ class Trainer:
         self._init_dataloaders()
         
         if self.rank == 0:
+            log_dir = os.path.join('experiments', opt['name'])
+            os.makedirs(log_dir, exist_ok=True)
+            log_file = os.path.join(log_dir, f"train_{opt['name']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
+            
+            logging.basicConfig(
+                level=logging.INFO,
+                format='%(asctime)s %(levelname)s: %(message)s',
+                handlers=[
+                    logging.FileHandler(log_file),
+                    logging.StreamHandler()
+                ]
+            )
+            self.logger = logging.getLogger('Restormer')
+            self.logger.info(f"Model [Restormer] is created.")
+            
             self.writer = SummaryWriter(log_dir=os.path.join('tb_logger', opt['name']))
             os.makedirs(os.path.join('experiments', opt['name'], 'models'), exist_ok=True)
             os.makedirs(os.path.join('experiments', opt['name'], 'training_states'), exist_ok=True)
@@ -81,7 +98,9 @@ class Trainer:
             )
 
     def _init_model(self):
-        self.net_g = Restormer(**self.opt['network_g']).to(self.device)
+        net_opt = self.opt['network_g'].copy()
+        net_opt.pop('type', None)
+        self.net_g = Restormer(**net_opt).to(self.device)
         if self.is_dist:
             self.net_g = DDP(self.net_g, device_ids=[self.local_rank], output_device=self.local_rank)
 
@@ -117,7 +136,8 @@ class Trainer:
             self.criterion = nn.L1Loss().to(self.device)
 
     def _init_dataloaders(self):
-        train_ds_opt = self.opt['datasets']['train']
+        train_ds_opt = self.opt['datasets']['train'].copy()
+        train_ds_opt['phase'] = 'train'
         self.train_set = Dataset_PairedImage(train_ds_opt)
         self.train_sampler = DistributedSampler(self.train_set, num_replicas=self.world_size, rank=self.rank, shuffle=True) if self.is_dist else None
         self.train_loader = DataLoader(
@@ -131,6 +151,8 @@ class Trainer:
 
         val_ds_opt = self.opt['datasets'].get('val')
         if val_ds_opt:
+            val_ds_opt = val_ds_opt.copy()
+            val_ds_opt['phase'] = 'val'
             self.val_set = Dataset_PairedImage(val_ds_opt)
             self.val_loader = DataLoader(self.val_set, batch_size=1, shuffle=False, num_workers=1, pin_memory=True)
 
@@ -164,11 +186,18 @@ class Trainer:
             current_iter = self.resume_iter
             epoch = self.resume_epoch
 
+        if self.rank == 0:
+            self.logger.info(f"Start training from epoch: {epoch}, iter: {current_iter}")
+
+        data_timer = time.time()
+        iter_timer = time.time()
+        
         while current_iter < total_iter:
             if self.is_dist:
                 self.train_sampler.set_epoch(epoch)
             
             for batch_data in self.train_loader:
+                data_time = time.time() - data_timer
                 current_iter += 1
                 if current_iter > total_iter:
                     break
@@ -179,6 +208,11 @@ class Trainer:
                 
                 cur_gt_size = gt_sizes[idx]
                 cur_batch_size = mini_batch_sizes[idx]
+
+                # Log progressive learning update if it changes
+                if current_iter == 1 or (idx > 0 and current_iter == groups[idx-1] + 1):
+                    if self.rank == 0:
+                        self.logger.info(f"\n Updating Patch_Size to {cur_gt_size} and Batch_Size to {cur_batch_size} \n")
                 
                 lq = batch_data['lq'].to(self.device)
                 gt = batch_data['gt'].to(self.device)
@@ -211,18 +245,35 @@ class Trainer:
                 self.optimizer_g.step()
                 self.scheduler.step()
                 self.update_ema()
+                
+                iter_time = time.time() - iter_timer
 
                 if self.rank == 0 and current_iter % self.opt['logger']['print_freq'] == 0:
                     lr = self.optimizer_g.param_groups[0]['lr']
-                    print(f"[Iter {current_iter}/{total_iter}] Loss: {loss.item():.4f} LR: {lr:.6f}")
+                    # Calculate ETA
+                    remain_iter = total_iter - current_iter
+                    avg_iter_time = iter_time # Simplified, for real ETA we'd use a moving average
+                    eta_sec = remain_iter * avg_iter_time
+                    eta_str = str(time.timedelta(seconds=int(eta_sec)))
+                    
+                    self.logger.info(
+                        f"[{self.opt['name']}][epoch: {epoch:2d}, iter: {current_iter:7,d}, lr:({lr:.3e},)] "
+                        f"[eta: {eta_str}, time (data): {iter_time:.3f} ({data_time:.3f})] l_pix: {loss.item():.4e} "
+                    )
+                    
                     self.writer.add_scalar('Loss/train', loss.item(), current_iter)
                     self.writer.add_scalar('LR', lr, current_iter)
+                    self.writer.flush()
 
                 if current_iter % self.opt['val']['val_freq'] == 0:
                     self.validate(current_iter)
 
                 if self.rank == 0 and current_iter % self.opt['logger']['save_checkpoint_freq'] == 0:
+                    self.logger.info("Saving models and training states.")
                     self.save(epoch, current_iter)
+                
+                data_timer = time.time()
+                iter_timer = time.time()
 
             epoch += 1
 
@@ -232,11 +283,18 @@ class Trainer:
         model.eval()
         psnr_total = 0
         count = 0
+        
+        psnr_opt = self.opt['val']['metrics'].get('psnr', {})
+        crop_border = psnr_opt.get('crop_border', 0)
+        test_y_channel = psnr_opt.get('test_y_channel', False)
+
         for val_data in self.val_loader:
             lq = val_data['lq'].to(self.device)
             gt = val_data['gt'].to(self.device)
             output = model(lq)
-            psnr_total += calculate_psnr(output[0], gt[0])
+            # Clamp output to [0, 1] for metric calculation
+            output = torch.clamp(output, 0, 1)
+            psnr_total += calculate_psnr(output[0], gt[0], crop_border=crop_border, test_y_channel=test_y_channel)
             count += 1
         
         avg_psnr = psnr_total / count
@@ -246,8 +304,9 @@ class Trainer:
             avg_psnr = avg_psnr_t.item() / self.world_size
 
         if self.rank == 0:
-            print(f"[Validation] Iter {current_iter} PSNR: {avg_psnr:.2f}")
+            self.logger.info(f"Validation ValSet, # psnr: {avg_psnr:.4f}")
             self.writer.add_scalar('PSNR/val', avg_psnr, current_iter)
+            self.writer.flush()
         
         self.net_g.train()
 

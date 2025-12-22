@@ -3,13 +3,32 @@ import torch.nn.functional as F
 import numpy as np
 import cv2
 
-def calculate_psnr(img1, img2, crop_border=0):
+def bgr2ycbcr(img, only_y=True):
+    """Convert BGR image to YCbCr.
+    The implementation is the same as MATLAB's rgb2ycbcr.
+    """
+    img = img.astype(np.float32)
+    if only_y:
+        rlt = np.dot(img, [24.966, 128.553, 65.481]) / 255.0 + 16.0 / 255.0
+    else:
+        rlt = np.matmul(img, [[24.966, 112, -18.214], [128.553, -74.203, -93.786], [65.481, -37.797, 112]]) / 255.0 + [16, 128, 128] / 255.0
+    return rlt.astype(np.float32)
+
+def calculate_psnr(img1, img2, crop_border=0, test_y_channel=False):
     """Calculate PSNR."""
     if isinstance(img1, torch.Tensor):
         img1 = img1.detach().cpu().numpy().transpose(1, 2, 0)
     if isinstance(img2, torch.Tensor):
         img2 = img2.detach().cpu().numpy().transpose(1, 2, 0)
     
+    # Restormer datasets/models usually output in [0, 1] range.
+    # Basicsr metrics often expect [0, 255] or handle scaling explicitly.
+    # To be consistent with basicsr, we'll work in [0, 255] for PSNR calculation.
+    if img1.max() <= 1.0:
+        img1 = img1 * 255.0
+    if img2.max() <= 1.0:
+        img2 = img2 * 255.0
+
     img1 = img1.astype(np.float64)
     img2 = img2.astype(np.float64)
 
@@ -17,28 +36,41 @@ def calculate_psnr(img1, img2, crop_border=0):
         img1 = img1[crop_border:-crop_border, crop_border:-crop_border, ...]
         img2 = img2[crop_border:-crop_border, crop_border:-crop_border, ...]
 
+    if test_y_channel:
+        img1 = bgr2ycbcr(img1, only_y=True)
+        img2 = bgr2ycbcr(img2, only_y=True)
+
     mse = np.mean((img1 - img2)**2)
     if mse == 0:
         return float('inf')
-    max_value = 1. if img1.max() <= 1 else 255.
-    return 20. * np.log10(max_value / np.sqrt(mse))
+    
+    return 20. * np.log10(255.0 / np.sqrt(mse))
 
-def calculate_ssim(img1, img2, crop_border=0):
+def calculate_ssim(img1, img2, crop_border=0, test_y_channel=False):
     """Calculate SSIM."""
     if isinstance(img1, torch.Tensor):
         img1 = img1.detach().cpu().numpy().transpose(1, 2, 0)
     if isinstance(img2, torch.Tensor):
         img2 = img2.detach().cpu().numpy().transpose(1, 2, 0)
 
+    if img1.max() <= 1.0:
+        img1 = img1 * 255.0
+    if img2.max() <= 1.0:
+        img2 = img2 * 255.0
+
+    img1 = img1.astype(np.float64)
+    img2 = img2.astype(np.float64)
+
     if crop_border != 0:
         img1 = img1[crop_border:-crop_border, crop_border:-crop_border, ...]
         img2 = img2[crop_border:-crop_border, crop_border:-crop_border, ...]
 
-    # Simplified SSIM implementation or using skimage
+    if test_y_channel:
+        img1 = bgr2ycbcr(img1, only_y=True)
+        img2 = bgr2ycbcr(img2, only_y=True)
+
     try:
         from skimage.metrics import structural_similarity as ssim
-        return ssim(img1, img2, data_range=img1.max(), multichannel=True)
+        return ssim(img1, img2, data_range=255.0, multichannel=(not test_y_channel))
     except ImportError:
-        # Fallback to a basic implementation if skimage is not available
-        # (Though we should probably ensure it is in requirements)
         return 0.0

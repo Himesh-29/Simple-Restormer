@@ -27,7 +27,7 @@ class Dataset_PairedImage(data.Dataset):
         img_gt = cv2.imread(gt_path, cv2.IMREAD_COLOR).astype(np.float32) / 255.
         img_lq = cv2.imread(lq_path, cv2.IMREAD_COLOR).astype(np.float32) / 255.
 
-        if self.phase == 'train':
+        if self.phase == 'train' and 'gt_size' in self.opt:
             gt_size = self.opt['gt_size']
             # random crop
             img_gt, img_lq = paired_random_crop(img_gt, img_lq, gt_size, self.scale)
