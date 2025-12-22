@@ -21,8 +21,10 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
     # Load model
-    model = Restormer(**opt['network_g']).to(device)
-    checkpoint = torch.load(args.model_path, map_location=device)
+    net_opt = opt['network_g'].copy()
+    net_opt.pop('type', None)
+    model = Restormer(**net_opt).to(device)
+    checkpoint = torch.load(args.model_path, map_location=device, weights_only=True)
     if 'params' in checkpoint:
         model.load_state_dict(checkpoint['params'])
     else:
