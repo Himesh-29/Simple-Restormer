@@ -140,23 +140,12 @@ def install(args):
     run_command([
         sys.executable, "-m", "pip", "install", "-r", "requirements.txt"
     ])
-
-    print("--- Step 2: Setting up project with setup.py ---")
-    setup_command = [sys.executable, "setup.py", "develop"]
-
-    # Skip CUDA extension compilation if CUDA is not fully available
-    if not (torch.cuda.is_available() and os.getenv('CUDA_HOME')):
-        print("--- INFO: PyTorch CUDA runtime or CUDA_HOME not available. ---")
-        print("--- Passing --no_cuda_ext to setup.py to skip CUDA extension compilation. ---")
-        setup_command.append("--no_cuda_ext")
-
-    run_command(setup_command)
     print("--- Installation complete ---")
 
 def train(args):
     """Run the training process."""
     print("--- Step 3: Starting model training ---")
-    train_script = "basicsr/train.py"
+    train_script = "train.py"
     master_port = "4321"
 
     try:
