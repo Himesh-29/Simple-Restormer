@@ -9,6 +9,7 @@ import yaml
 import time
 import random
 import logging
+import numpy as np
 from datetime import datetime, timedelta
 from collections import deque
 from copy import deepcopy
