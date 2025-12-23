@@ -9,6 +9,8 @@ from data.dataset import Dataset_PairedImage
 from torch.utils.data import DataLoader
 from core.metrics import calculate_psnr, calculate_ssim
 import cv2
+import logging
+from datetime import datetime
 
 def main():
     parser = argparse.ArgumentParser()
@@ -21,7 +23,23 @@ def main():
         opt = yaml.safe_load(f)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"Using device: {device}")
+    
+    os.makedirs('results', exist_ok=True)
+    log_file = os.path.join('results', f"test_{opt['name']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s %(levelname)s: %(message)s',
+        handlers=[
+            logging.FileHandler(log_file),
+            logging.StreamHandler(sys.stdout)
+        ]
+    )
+    logger = logging.getLogger('RestormerTest')
+
+    logger.info(f"Using device: {device}")
+    logger.info(f"Model path: {args.model_path}")
+    logger.info(f"Option path: {args.opt}")
     
     # Load model
     model = define_network(opt['network_g']).to(device)
@@ -31,7 +49,7 @@ def main():
         model.load_state_dict(checkpoint['params'])
     else:
         model.load_state_dict(checkpoint)
-    print(f"Successfully loaded model from {args.model_path}")
+    logger.info(f"Successfully loaded model from {args.model_path}")
     model.eval()
 
     # Get test root and discover datasets
@@ -44,15 +62,21 @@ def main():
     # e.g. ./Datasets/test/Rain100H/target -> ./Datasets/test
     test_root = os.path.dirname(os.path.dirname(dataroot_gt_orig))
     
+    target_datasets = ['Rain100H', 'Rain100L', 'Test100']
     datasets = []
     if args.dataset:
         datasets = [args.dataset]
     else:
         if os.path.exists(test_root):
-             datasets = [d for d in os.listdir(test_root) if os.path.isdir(os.path.join(test_root, d))]
+             all_folders = [d for d in os.listdir(test_root) if os.path.isdir(os.path.join(test_root, d))]
+             datasets = [d for d in target_datasets if d in all_folders]
+             if not datasets:
+                 logger.warning(f"Target datasets {target_datasets} not found in {test_root}. Available: {all_folders}")
         else:
-            print(f"Warning: Test root {test_root} not found. Using dataset in YAML.")
-            datasets = [os.path.basename(os.path.dirname(dataroot_gt_orig))]
+            logger.warning(f"Test root {test_root} not found. Fallback to YAML dataset if in target list.")
+            yaml_ds = os.path.basename(os.path.dirname(dataroot_gt_orig))
+            if yaml_ds in target_datasets:
+                datasets = [yaml_ds]
             test_root = os.path.dirname(os.path.dirname(test_root)) # fallback
 
     # Metric options
@@ -61,6 +85,7 @@ def main():
     test_y_channel = psnr_opt.get('test_y_channel', False)
 
     print("Starting evaluation on test datasets...")
+    logger.info(f"Discovered datasets: {datasets}")
     
     os.makedirs('results', exist_ok=True)
 
@@ -72,7 +97,7 @@ def main():
         ds_opt['dataroot_lq'] = os.path.join(cur_ds_root, 'input')
         
         if not os.path.exists(ds_opt['dataroot_gt']):
-            print(f"Skipping {dataset_name}: target folder not found.")
+            logger.info(f"Skipping {dataset_name}: target folder not found.")
             continue
 
         # Create dataset-specific result folder
@@ -115,9 +140,9 @@ def main():
         pbar.close()
         avg_psnr = psnr_total / count
         avg_ssim = ssim_total / count
-        print(f"{dataset_name}: PSNR = {avg_psnr:.4f}, SSIM = {avg_ssim:.4f}")
+        logger.info(f"{dataset_name}: PSNR = {avg_psnr:.4f}, SSIM = {avg_ssim:.4f}")
 
-    print("\nEvaluation complete.")
+    logger.info("Evaluation complete.")
 
 if __name__ == '__main__':
     main()

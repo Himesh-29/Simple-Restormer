@@ -84,6 +84,7 @@ class Trainer:
             )
             self.logger = logging.getLogger('Restormer')
             self.logger.info(f"Model [{self.opt['network_g'].get('type', 'Restormer')}] is created.")
+            self._log_complexity()
             
             self.writer = SummaryWriter(log_dir=os.path.join('tb_logger', opt['name']))
             os.makedirs(os.path.join('experiments', opt['name'], 'models'), exist_ok=True)
@@ -102,6 +103,42 @@ class Trainer:
 
         if self.is_dist:
             self.net_g = DDP(self.net_g, device_ids=[self.local_rank], output_device=self.local_rank)
+
+    def _log_complexity(self):
+        if self.rank != 0:
+            return
+
+        # Prepare dummy input for GFlops calculation
+        # Use gt_size from config if available, else default to 128
+        h = w = self.opt['datasets']['train'].get('gt_size', 128)
+        dummy_input = torch.randn(1, self.opt['network_g'].get('inp_channels', 3), h, w).to(self.device)
+        
+        # Calculate parameters
+        total_params = sum(p.numel() for p in self.net_g.parameters())
+        
+        # Calculate GFlops using fvcore
+        try:
+            from fvcore.nn import FlopCountAnalysis
+            
+            # Suppress fvcore's verbose warnings about unsupported operators (like mul, mean, var)
+            # These element-wise ops have negligible impact on GFlops compared to Convs/LLMs.
+            logging.getLogger('fvcore').setLevel(logging.ERROR)
+            
+            flops = FlopCountAnalysis(self.net_g, dummy_input)
+            flops.unsupported_ops_warnings(False)
+            
+            total_flops = flops.total()
+            gflops = total_flops / 1e9
+            
+            self.logger.info(f"Model Parameters: {total_params:,}")
+            self.logger.info(f"Model GFlops: {gflops:.2f} (Input: {h}x{w})")
+            
+        except ImportError:
+            self.logger.warning("fvcore not found. GFlops calculation skipped. Install with 'pip install fvcore'")
+            self.logger.info(f"Model Parameters: {total_params:,}")
+        except Exception as e:
+            self.logger.warning(f"Error calculating GFlops: {e}")
+            self.logger.info(f"Model Parameters: {total_params:,}")
 
     def _init_optimizer(self):
         train_opt = self.opt['train']
