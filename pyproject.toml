@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "restormer-modular"
-version = "1.1.0"
-description = "A modular, standalone refactor of the Restormer image restoration project with multi-model support."
+version = "1.1.1"
+description = "A modular Restormer refactor with multi-model support, enhanced logging, and model complexity analytics (GFLOPs/Params)."
 readme = "README.md"
 requires-python = ">=3.9"
 authors = [
@@ -23,7 +23,9 @@ dependencies = [
     "tensorboard",
     "timm",
     "mamba-ssm",
-    "causal-conv1d>=1.2.0"
+    "causal-conv1d>=1.2.0",
+    "PyWavelets",
+    "fvcore"
 ]
 
 [tool.setuptools.packages.find]
