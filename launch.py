@@ -70,7 +70,17 @@ def install_dependencies(args):
 
     # Install other requirements
     if os.path.exists("requirements.txt"):
-        run_command([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"], "Installing requirements.txt...")
+        try:
+            # Check if pip is available
+            subprocess.run([sys.executable, "-m", "pip", "--version"], capture_output=True, check=True)
+            run_command([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"], "Installing requirements.txt...")
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            # If pip is missing, check if we are in a uv environment
+            if 'UV_PYTHON' in os.environ or os.path.exists('.venv'):
+                 print("--- [NOTICE] Pip not found in environment (common for uv). ---")
+                 print("--- Skipping manual pip install as dependencies should be managed via 'uv sync'. ---")
+            else:
+                 print("--- WARNING: pip not found. Please install dependencies manually. ---")
     
     print("--- Installation complete ---\n")
 

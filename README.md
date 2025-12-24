@@ -1,64 +1,78 @@
-# Restormer: PyTorch Edition
+# Restormer: Modular Image Restoration
 
-This repository provides a streamlined and easy-to-use PyTorch implementation of the paper **[Restormer: Efficient Transformer for High-Resolution Image Restoration](https://arxiv.org/abs/2111.09881)**.
+This repository provides a modernized, modular, and high-performance PyTorch implementation of **[Restormer: Efficient Transformer for High-Resolution Image Restoration](https://arxiv.org/abs/2111.09881)**. 
 
-The project is managed by a central `launch.py` script that automates the entire workflow, including environment setup, dependency installation, data downloading, training, and evaluation.
+Designed for both research and production, this refactor prioritizes environment isolation, detailed experiment tracking, and automated workflows.
 
-## Quick Start
+## 🚀 Key Features
 
-Getting started is designed to be as simple as possible. For detailed installation steps, see [INSTALL.md](./INSTALL.md).
+*   **⚡ Modern Dependency Management**: Native support for `uv`, providing significantly faster and completely isolated virtual environments compared to traditional `pip` or `conda`.
+*   **🎮 Centralized Launcher (`launch.py`)**: A single entry point to automate the entire lifecycle—environment setup, dependency installation, dataset downloading, training, and evaluation.
+*   **📊 Model Complexity Analytics**: Integrated GFLOPs calculation and parameter counting (via `fvcore`). Automatically logs model complexity for various input sizes.
+*   **📜 Professional Logging System**: Replaced standard prints with a robust `logging` framework. Logs are timestamped, leveled, and automatically saved to both console and file (`experiments/` and `results/`).
+*   **📈 Progressive Learning**: Built-in support for adaptive training where patch sizes and mini-batch sizes evolve throughout the training process to optimize performance on high-resolution images.
+*   **🔍 Automatic Dataset Discovery**: The evaluation pipeline automatically discovers available benchmark datasets (e.g., Rain100H, Rain100L, Test100) and executes batch assessments.
+*   **🛡️ Model Stability & Augmentation**:
+    *   **EMA (Exponential Moving Average)**: Maintains a shadow copy of weights for improved validation stability.
+    *   **Mixing Augmentations**: Includes Mixup support to enhance model generalization.
+*   **🌐 Distributed Training**: Native support for PyTorch Distributed Data Parallel (DDP) for multi-GPU scaling.
+*   **☁️ Cloud Native**: Automatic environment detection and optimized setup for **Google Colab** and **Kaggle**.
 
-### Run the Full Pipeline
-To set up the environment, download data, train the model, and run evaluation, simply execute the launcher script:
-```bash
-python launch.py
+## 🛠️ Quick Start
+
+### 1. Project Setup (Recommended: `uv`)
+Ensure you have `uv` installed, then simply run:
+```powershell
+uv python install 3.12
+uv sync
 ```
 
-### Running Only Training or Testing
-You can easily customize the workflow using command-line flags:
+### 2. Run the Full Pipeline
+To set up, download data, train, and evaluate in one go:
+```bash
+uv run launch.py
+```
 
+### 3. Custom Workflows
+Use command-line flags to customize the process:
 - **Train Only**:
   ```bash
-  python launch.py --skip-test
+  uv run launch.py --skip-test
   ```
 - **Test Only** (using a pre-existing trained model):
   ```bash
-  python launch.py --skip-train
+  uv run launch.py --skip-train
   ```
-- **Skip Installation**: If your environment and datasets are already set up, you can skip the installation steps:
+- **Skip Installation**:
   ```bash
-  python launch.py --skip-install
+  uv run launch.py --skip-install
   ```
 
 For a full list of options, use the help flag:
 ```bash
-python launch.py --help
+uv run launch.py --help
 ```
 
-## Using Pre-trained Models
+## ⚙️ Configuration
 
-To evaluate a pre-trained model:
-1. Download the model weights (e.g., from the [official repository's releases](https://drive.google.com/drive/folders/1ZEDDEVW0UgkpWi-N4Lj_JUoVChGXCu_u?usp=sharing)).
-2. Place the model file (e.g., `net_g_latest.pth`) inside the `experiments/Restormer/models/` directory. You may need to create these folders if they don't exist.
-3. Run the launcher with the `--skip-train` flag:
-   ```bash
-   python launch.py --skip-train
-   ```
+Control every aspect of your experiment via YAML files located in:
+`Options/Restormer.yml`
 
-## Configuration
+This file handles network architecture, progressive learning iteration benchmarks, loss functions (L1/MSE), and dataset paths.
 
-The main configuration for the project, including model architecture, training parameters, and dataset paths, is located in:
-```
-Options/Restormer.yml
-```
-You can modify this file to change hyperparameters or adjust experiment settings.
-
-## Project Workflow
+## 🔄 Project Workflow
 
 The `launch.py` script follows the workflow illustrated below, automating each step from setup to execution.
 
 ![Project Workflow](./assets/workflow.png)
 
-## Contributing
+## 📊 Project Structure
+- `core/`: Core logic for training, scheduling, and metrics.
+- `data/`: Dataset handling and paired image loaders.
+- `models/`: Restormer architecture and network definitions.
+- `Options/`: Configuration files for various experiments.
+- `launch.py`: Unified automation script.
+
+## 🤝 Contributing
 
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
