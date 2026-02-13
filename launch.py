@@ -63,8 +63,10 @@ def install_dependencies(args):
         print(f"--- PyTorch {torch.__version__} found. ---")
         if torch.cuda.is_available():
             print(f"--- CUDA is available. Device: {torch.cuda.get_device_name(0)} ---")
+        elif torch.backends.mps.is_available():
+            print("--- MPS is available. Device: Apple Silicon (Metal Performance Shaders) ---")
         else:
-            print("--- WARNING: CUDA is NOT available to PyTorch. Training will be slow on CPU. ---")
+            print("--- WARNING: CUDA/MPS is NOT available to PyTorch. Training will be slow on CPU. ---")
     except ImportError:
         print("--- PyTorch not found. You may need to install it manually in your Anaconda environment. ---")
 

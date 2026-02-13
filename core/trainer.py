@@ -46,13 +46,23 @@ class Trainer:
         self.rank = int(os.environ.get('RANK', 0))
         self.world_size = int(os.environ.get('WORLD_SIZE', 1))
         self.local_rank = int(os.environ.get('LOCAL_RANK', 0))
-        self.device = torch.device(f'cuda:{self.local_rank}' if torch.cuda.is_available() else 'cpu')
+        if torch.cuda.is_available():
+            self.device = torch.device(f'cuda:{self.local_rank}')
+        elif torch.backends.mps.is_available():
+            self.device = torch.device('mps')
+        else:
+            self.device = torch.device('cpu')
         
         self.is_dist = self.world_size > 1
         if self.is_dist:
+            if torch.cuda.is_available():
+                backend = 'nccl'
+                torch.cuda.set_device(self.device)
+            else:
+                backend = 'gloo' # Fallback for CPU/MPS distributed (though MPS dist is limited)
+                
             if not dist.is_initialized():
-                dist.init_process_group(backend='nccl' if torch.cuda.is_available() else 'gloo')
-            torch.cuda.set_device(self.device)
+                dist.init_process_group(backend=backend)
 
         self._init_model()
         

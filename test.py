@@ -22,7 +22,12 @@ def main():
     with open(args.opt, 'r') as f:
         opt = yaml.safe_load(f)
 
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    if torch.cuda.is_available():
+        device = torch.device('cuda')
+    elif torch.backends.mps.is_available():
+        device = torch.device('mps')
+    else:
+        device = torch.device('cpu')
     
     os.makedirs('results', exist_ok=True)
     log_file = os.path.join('results', f"test_{opt['name']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
