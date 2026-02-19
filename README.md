@@ -1,5 +1,7 @@
 # Restormer: Modular Image Restoration
 
+![Visitors](https://api.visitorbadge.io/api/visitors?path=https%3A%2F%2Fgithub.com%2FHimesh-29%2FSimple-Restormer&label=Visitors&countColor=%23263759)
+
 This repository provides a modernized, modular, and high-performance PyTorch implementation of **[Restormer: Efficient Transformer for High-Resolution Image Restoration](https://arxiv.org/abs/2111.09881)**. 
 
 Designed for both research and production, this refactor prioritizes environment isolation, detailed experiment tracking, and automated workflows.
