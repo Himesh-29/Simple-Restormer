@@ -75,6 +75,30 @@ The `launch.py` script follows the workflow illustrated below, automating each s
 - `Options/`: Configuration files for various experiments.
 - `launch.py`: Unified automation script.
 
+## 🖼️ Interactive Visualizer Dashboard
+
+A new tool `visualize_model.py` provides a **model-agnostic Gradio-based dashboard** that
+works with any network defined by an Options YAML file.  Features include:
+
+* **Input / Output / Residual** with PSNR and SSIM metrics.
+* **Image Channel Explorer** — decompose R/G/B channels of both input and
+  output, view histograms, and compare differences.
+* **Multi-Scale Comparison** at full, half, and quarter resolution.
+* **Block I/O Visualization** — capture the input and output of every top‑level
+  block in the model, showing how data flows through the architecture.
+* **Feature Flow** and **Channel Explorer** tabs for inspecting activation
+  energies and individual feature maps.
+* **Context Loss Analysis** — L1 differences between consecutive layers.
+* **Automatic tab inclusion** when `capture_all` support is detected (e.g.
+  cluster maps and attention heads for ClusterAttentionRestormer).
+
+Launch the dashboard with:
+```bash
+uv run visualize_model.py --opt Options/Restormer.yml
+```
+
+The visualizer is released as part of the new **1.4.0** version.
+
 ## 🤝 Contributing
 
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.

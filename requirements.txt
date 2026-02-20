@@ -27,3 +27,4 @@ tensorboard
 timm
 PyWavelets
 fvcore
+gradio
