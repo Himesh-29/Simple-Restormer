@@ -99,6 +99,12 @@ uv run visualize_model.py --opt Options/Restormer.yml
 
 The visualizer was released as part of **v1.4.0**.
 
+## 🚀 What's New in v1.5.0 (Perceptual Metrics)
+
+* 👁️ **LPIPS Integration:** Added Learned Perceptual Image Patch Similarity (LPIPS) to `core/metrics.py` utilizing the standardized `alex` net.
+* 📊 **Human-Aligned Evaluation:** `test.py` now calculates and displays LPIPS alongside PSNR and SSIM. This proves that the model creates images that actually *look* better to the human eye, not just mathematically.
+* 📈 **Perceptual Gain Tracking:** The beautiful terminal tables now include "In LPIPS", "Out LPIPS", and "+ LPIPS" to accurately track perceptual improvements across entire datasets.
+
 ## 🚀 What's New in v1.4.1
 
 * 📊 **Automated Gain Calculation:** Computes the mathematical PSNR/SSIM improvement between the rainy input and derained output per image.

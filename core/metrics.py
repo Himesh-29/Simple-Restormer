@@ -3,6 +3,9 @@ import torch.nn.functional as F
 import numpy as np
 import cv2
 
+# Lazily initialized LPIPS model
+_lpips_model = None
+
 def rgb2ycbcr(img, only_y=True):
     """Convert RGB image to YCbCr.
     The implementation is the same as MATLAB's rgb2ycbcr.
@@ -75,3 +78,37 @@ def calculate_ssim(img1, img2, crop_border=0, test_y_channel=False):
         return ssim(img1, img2, data_range=255.0, multichannel=(not test_y_channel))
     except ImportError:
         return 0.0
+
+def calculate_lpips(img1_tensor, img2_tensor, device=None):
+    """
+    Calculate LPIPS perceptual distance. Lower is better.
+    Expects input tensors shaped (B, C, H, W) in range [0, 1].
+    """
+    global _lpips_model
+    try:
+        import lpips
+    except ImportError:
+        return 0.0
+        
+    if _lpips_model is None:
+        if device is None:
+            device = img1_tensor.device
+        _lpips_model = lpips.LPIPS(net='alex').to(device)
+        _lpips_model.eval()
+
+    # LPIPS expects images in range [-1, 1]
+    # Restormer generally outputs [0, 1]
+    if img1_tensor.max() <= 1.0:
+        img1_val = img1_tensor * 2.0 - 1.0
+    else:
+        img1_val = (img1_tensor / 255.0) * 2.0 - 1.0
+        
+    if img2_tensor.max() <= 1.0:
+        img2_val = img2_tensor * 2.0 - 1.0
+    else:
+        img2_val = (img2_tensor / 255.0) * 2.0 - 1.0
+        
+    with torch.no_grad():
+        dist = _lpips_model(img1_val, img2_val)
+        
+    return dist.mean().item()

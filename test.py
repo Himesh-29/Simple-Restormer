@@ -7,7 +7,7 @@ from tqdm import tqdm
 from models import define_network
 from data.dataset import Dataset_PairedImage
 from torch.utils.data import DataLoader
-from core.metrics import calculate_psnr, calculate_ssim
+from core.metrics import calculate_psnr, calculate_ssim, calculate_lpips
 import cv2
 import logging
 from datetime import datetime
@@ -123,8 +123,10 @@ def main():
 
         psnr_total = 0
         ssim_total = 0
+        lpips_total = 0
         input_psnr_total = 0
         input_ssim_total = 0
+        input_lpips_total = 0
         count = 0
         
         pbar = tqdm(total=len(val_set), unit='img', desc=f"Processing {dataset_name}")
@@ -139,15 +141,19 @@ def main():
                 # Metrics: derained output vs ground truth
                 psnr = calculate_psnr(output[0], gt[0], crop_border=crop_border, test_y_channel=test_y_channel)
                 ssim = calculate_ssim(output[0], gt[0], crop_border=crop_border, test_y_channel=test_y_channel)
+                lpips_val = calculate_lpips(output, gt, device=device)
                 
                 # Metrics: rainy input vs ground truth
                 input_psnr = calculate_psnr(lq[0], gt[0], crop_border=crop_border, test_y_channel=test_y_channel)
                 input_ssim = calculate_ssim(lq[0], gt[0], crop_border=crop_border, test_y_channel=test_y_channel)
+                input_lpips = calculate_lpips(lq, gt, device=device)
                 
                 psnr_total += psnr
                 ssim_total += ssim
+                lpips_total += lpips_val
                 input_psnr_total += input_psnr
                 input_ssim_total += input_ssim
+                input_lpips_total += input_lpips
                 count += 1
                 
                 img_name = os.path.basename(data['lq_path'][0])
@@ -163,23 +169,30 @@ def main():
         pbar.close()
         avg_psnr = psnr_total / count
         avg_ssim = ssim_total / count
+        avg_lpips = lpips_total / count
         avg_input_psnr = input_psnr_total / count
         avg_input_ssim = input_ssim_total / count
+        avg_input_lpips = input_lpips_total / count
+        
         avg_psnr_gain = avg_psnr - avg_input_psnr
         avg_ssim_gain = avg_ssim - avg_input_ssim
+        avg_lpips_gain = avg_lpips - avg_input_lpips  # Negative is better for LPIPS gain
         
-        logger.info(f"{dataset_name}: PSNR = {avg_psnr:.4f}, SSIM = {avg_ssim:.4f}")
-        logger.info(f"{dataset_name} Gain: PSNR = {avg_psnr_gain:+.4f}, SSIM = {avg_ssim_gain:+.4f}")
+        logger.info(f"{dataset_name}: PSNR = {avg_psnr:.4f}, SSIM = {avg_ssim:.4f}, LPIPS = {avg_lpips:.4f}")
+        logger.info(f"{dataset_name} Gain: PSNR = {avg_psnr_gain:+.4f}, SSIM = {avg_ssim_gain:+.4f}, LPIPS = {avg_lpips_gain:+.4f}")
         
         all_results.append({
             'dataset': dataset_name,
             'count': count,
             'input_psnr': avg_input_psnr,
             'input_ssim': avg_input_ssim,
+            'input_lpips': avg_input_lpips,
             'derained_psnr': avg_psnr,
             'derained_ssim': avg_ssim,
+            'derained_lpips': avg_lpips,
             'psnr_gain': avg_psnr_gain,
             'ssim_gain': avg_ssim_gain,
+            'lpips_gain': avg_lpips_gain,
         })
 
     # Print final summary table across all datasets
@@ -191,8 +204,9 @@ def main():
         if HAS_TABULATE:
             headers = [
                 "Dataset", "Images", 
-                "Input PSNR", "Derained PSNR", "PSNR Gain", 
-                "Input SSIM", "Derained SSIM", "SSIM Gain"
+                "In PSNR", "Out PSNR", "+ PSNR", 
+                "In SSIM", "Out SSIM", "+ SSIM",
+                "In LPIPS", "Out LPIPS", "+ LPIPS"
             ]
             
             table_data = []
@@ -205,7 +219,10 @@ def main():
                     f"{r['psnr_gain']:+.4f}",
                     f"{r['input_ssim']:.4f}",
                     f"{r['derained_ssim']:.4f}",
-                    f"{r['ssim_gain']:+.4f}"
+                    f"{r['ssim_gain']:+.4f}",
+                    f"{r['input_lpips']:.4f}",
+                    f"{r['derained_lpips']:.4f}",
+                    f"{r['lpips_gain']:+.4f}"
                 ])
                 
             table_str = tabulate(table_data, headers=headers, tablefmt="outline", stralign="right", numalign="right")
@@ -215,15 +232,16 @@ def main():
                 logger.info(line)
         else:
             # Fallback if tabulate is not installed
-            header = f"{'Dataset':<14} {'Images':>6}  {'Input PSNR':>11} {'Derained PSNR':>14} {'PSNR Gain':>10}  {'Input SSIM':>11} {'Derained SSIM':>14} {'SSIM Gain':>10}"
+            header = f"{'Dataset':<10} {'Images':>6}  {'In PSNR':>9} {'Out PSNR':>9} {'+ PSNR':>9}  {'In SSIM':>9} {'Out SSIM':>9} {'+ SSIM':>9}  {'In LPIPS':>9} {'Out LPIPS':>9} {'+ LPIPS':>9}"
             separator = '-' * len(header)
             logger.info(header)
             logger.info(separator)
             for r in all_results:
                 logger.info(
-                    f"{r['dataset']:<14} {r['count']:>6}  "
-                    f"{r['input_psnr']:>11.4f} {r['derained_psnr']:>14.4f} {r['psnr_gain']:>+10.4f}  "
-                    f"{r['input_ssim']:>11.4f} {r['derained_ssim']:>14.4f} {r['ssim_gain']:>+10.4f}"
+                    f"{r['dataset']:<10} {r['count']:>6}  "
+                    f"{r['input_psnr']:>9.4f} {r['derained_psnr']:>9.4f} {r['psnr_gain']:>+9.4f}  "
+                    f"{r['input_ssim']:>9.4f} {r['derained_ssim']:>9.4f} {r['ssim_gain']:>+9.4f}  "
+                    f"{r['input_lpips']:>9.4f} {r['derained_lpips']:>9.4f} {r['lpips_gain']:>+9.4f}"
                 )
             logger.info(separator)
     
