@@ -12,6 +12,12 @@ import cv2
 import logging
 from datetime import datetime
 
+try:
+    from tabulate import tabulate
+    HAS_TABULATE = True
+except ImportError:
+    HAS_TABULATE = False
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-opt', type=str, required=True, help='Path to option YAML file.')
@@ -93,6 +99,9 @@ def main():
     logger.info(f"Discovered datasets: {datasets}")
     
     os.makedirs('results', exist_ok=True)
+    
+    # Collect per-dataset results for a final summary table
+    all_results = []
 
     for dataset_name in datasets:
         # Construct dynamic paths for the dataset
@@ -114,6 +123,8 @@ def main():
 
         psnr_total = 0
         ssim_total = 0
+        input_psnr_total = 0
+        input_ssim_total = 0
         count = 0
         
         pbar = tqdm(total=len(val_set), unit='img', desc=f"Processing {dataset_name}")
@@ -125,16 +136,23 @@ def main():
                 output = model(lq)
                 output = torch.clamp(output, 0, 1)
                 
-                # Metrics
+                # Metrics: derained output vs ground truth
                 psnr = calculate_psnr(output[0], gt[0], crop_border=crop_border, test_y_channel=test_y_channel)
                 ssim = calculate_ssim(output[0], gt[0], crop_border=crop_border, test_y_channel=test_y_channel)
                 
+                # Metrics: rainy input vs ground truth
+                input_psnr = calculate_psnr(lq[0], gt[0], crop_border=crop_border, test_y_channel=test_y_channel)
+                input_ssim = calculate_ssim(lq[0], gt[0], crop_border=crop_border, test_y_channel=test_y_channel)
+                
                 psnr_total += psnr
                 ssim_total += ssim
+                input_psnr_total += input_psnr
+                input_ssim_total += input_ssim
                 count += 1
                 
-                # Save processed image
                 img_name = os.path.basename(data['lq_path'][0])
+                
+                # Save processed image
                 output_img = output[0].detach().cpu().numpy().transpose(1, 2, 0)
                 output_img = (output_img * 255.0).clip(0, 255).astype('uint8')
                 output_img = cv2.cvtColor(output_img, cv2.COLOR_RGB2BGR)
@@ -145,8 +163,70 @@ def main():
         pbar.close()
         avg_psnr = psnr_total / count
         avg_ssim = ssim_total / count
+        avg_input_psnr = input_psnr_total / count
+        avg_input_ssim = input_ssim_total / count
+        avg_psnr_gain = avg_psnr - avg_input_psnr
+        avg_ssim_gain = avg_ssim - avg_input_ssim
+        
         logger.info(f"{dataset_name}: PSNR = {avg_psnr:.4f}, SSIM = {avg_ssim:.4f}")
+        logger.info(f"{dataset_name} Gain: PSNR = {avg_psnr_gain:+.4f}, SSIM = {avg_ssim_gain:+.4f}")
+        
+        all_results.append({
+            'dataset': dataset_name,
+            'count': count,
+            'input_psnr': avg_input_psnr,
+            'input_ssim': avg_input_ssim,
+            'derained_psnr': avg_psnr,
+            'derained_ssim': avg_ssim,
+            'psnr_gain': avg_psnr_gain,
+            'ssim_gain': avg_ssim_gain,
+        })
 
+    # Print final summary table across all datasets
+    if all_results:
+        logger.info(f"\n{'#'*70}")
+        logger.info(f"  FINAL RESULTS — Model Performance Summary")
+        logger.info(f"{'#'*70}")
+        
+        if HAS_TABULATE:
+            headers = [
+                "Dataset", "Images", 
+                "Input PSNR", "Derained PSNR", "PSNR Gain", 
+                "Input SSIM", "Derained SSIM", "SSIM Gain"
+            ]
+            
+            table_data = []
+            for r in all_results:
+                table_data.append([
+                    r['dataset'], 
+                    r['count'],
+                    f"{r['input_psnr']:.4f}",
+                    f"{r['derained_psnr']:.4f}",
+                    f"{r['psnr_gain']:+.4f}",
+                    f"{r['input_ssim']:.4f}",
+                    f"{r['derained_ssim']:.4f}",
+                    f"{r['ssim_gain']:+.4f}"
+                ])
+                
+            table_str = tabulate(table_data, headers=headers, tablefmt="outline", stralign="right", numalign="right")
+            
+            # Since tabulate output can be multiline, log each line so the logger prefix is clean
+            for line in table_str.split('\n'):
+                logger.info(line)
+        else:
+            # Fallback if tabulate is not installed
+            header = f"{'Dataset':<14} {'Images':>6}  {'Input PSNR':>11} {'Derained PSNR':>14} {'PSNR Gain':>10}  {'Input SSIM':>11} {'Derained SSIM':>14} {'SSIM Gain':>10}"
+            separator = '-' * len(header)
+            logger.info(header)
+            logger.info(separator)
+            for r in all_results:
+                logger.info(
+                    f"{r['dataset']:<14} {r['count']:>6}  "
+                    f"{r['input_psnr']:>11.4f} {r['derained_psnr']:>14.4f} {r['psnr_gain']:>+10.4f}  "
+                    f"{r['input_ssim']:>11.4f} {r['derained_ssim']:>14.4f} {r['ssim_gain']:>+10.4f}"
+                )
+            logger.info(separator)
+    
     logger.info("Evaluation complete.")
 
 if __name__ == '__main__':

@@ -97,7 +97,13 @@ Launch the dashboard with:
 uv run visualize_model.py --opt Options/Restormer.yml
 ```
 
-The visualizer is released as part of the new **1.4.0** version.
+The visualizer was released as part of **v1.4.0**.
+
+## 🚀 What's New in v1.4.1
+
+* 📊 **Automated Gain Calculation:** Computes the mathematical PSNR/SSIM improvement between the rainy input and derained output per image.
+* 🖥️ **Beautiful Terminal Tables:** Replaced standard text logging with clean, aligned ASCII summary tables (via `tabulate`) for cross-dataset comparisons.
+* ⚡ **Cleaner Console Output:** Removed noisy per-image tqdm logging in favor of concise per-dataset summaries and a final holistic dashboard.
 
 ## 🤝 Contributing
 
