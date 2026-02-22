@@ -178,6 +178,14 @@ class Trainer:
             self.criterion = nn.L1Loss().to(self.device)
         elif loss_opt['type'] == 'MSELoss':
             self.criterion = nn.MSELoss().to(self.device)
+        elif loss_opt['type'] == 'CombinedRestorationLoss':
+            from core.losses import CombinedRestorationLoss
+            self.criterion = CombinedRestorationLoss(
+                charbonnier_weight=loss_opt.get('charbonnier_weight', 1.0),
+                fft_weight=loss_opt.get('fft_weight', 0.1),
+                edge_weight=loss_opt.get('edge_weight', 0.05),
+                eps=loss_opt.get('eps', 1e-3),
+            ).to(self.device)
         else:
             self.criterion = nn.L1Loss().to(self.device)
 
@@ -282,8 +290,20 @@ class Trainer:
                     gt, lq = self.mixing_augmentation(gt, lq)
 
                 self.optimizer_g.zero_grad()
-                output = self.net_g(lq)
+                # Pass current_iter for models that support warmup (V4+)
+                try:
+                    result = self.net_g(lq, current_iter=current_iter)
+                except TypeError:
+                    # Fallback for models that don't accept current_iter (V1-V3)
+                    result = self.net_g(lq)
+                # Support models that return (output, aux_losses_dict)
+                if isinstance(result, tuple):
+                    output, aux_losses = result
+                else:
+                    output, aux_losses = result, {}
                 loss = self.criterion(output, gt)
+                for loss_key, loss_val in aux_losses.items():
+                    loss = loss + loss_val
                 loss.backward()
                 
                 if self.opt['train'].get('use_grad_clip', False):
@@ -303,9 +323,15 @@ class Trainer:
                     eta_sec = remain_iter * avg_iter_time
                     eta_str = str(timedelta(seconds=int(eta_sec)))
                     
+                    # Build aux loss string for logging
+                    aux_str = ""
+                    for loss_key, loss_val in aux_losses.items():
+                        aux_str += f" {loss_key}: {loss_val.item():.4e}"
+                        self.writer.add_scalar(f'Loss/{loss_key}', loss_val.item(), current_iter)
+
                     self.logger.info(
                         f"[{self.opt['name']}][epoch: {epoch:2d}, iter: {current_iter:7,d}, lr:({lr:.3e},)] "
-                        f"[eta: {eta_str}, time (data): {iter_time:.3f} ({data_time:.3f})] l_pix: {loss.item():.4e} "
+                        f"[eta: {eta_str}, time (data): {iter_time:.3f} ({data_time:.3f})] l_pix: {loss.item():.4e}{aux_str} "
                     )
                     
                     self.writer.add_scalar('Loss/train', loss.item(), current_iter)
